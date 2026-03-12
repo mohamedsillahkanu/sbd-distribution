@@ -429,15 +429,17 @@ function persist(){ localStorage.setItem('sbd_dist_records', JSON.stringify(dist
 async function loadData(){
   const hint = document.getElementById('loginHint');
   try{
-    hint.textContent = 'Loading users.csv…';
-    const r1 = await fetch('users.csv');
-    if(!r1.ok) throw new Error('users.csv not found');
-    users = Papa.parse(await r1.text(), {header:true, skipEmptyLines:true}).data;
+    hint.textContent = 'Loading users_dist.csv…';
+    const r1 = await fetch('users_dist.csv');
+    if(!r1.ok) throw new Error('users_dist.csv not found');
+    users = Papa.parse(await r1.text(), {header:true, skipEmptyLines:true}).data
+      .map(u => Object.fromEntries(Object.entries(u).map(([k,v])=>[k.trim(),(v||'').trim()])));
 
     hint.textContent = 'Loading schools.csv…';
     const r2 = await fetch('schools.csv');
     if(!r2.ok) throw new Error('schools.csv not found');
-    schools = Papa.parse(await r2.text(), {header:true, skipEmptyLines:true}).data;
+    schools = Papa.parse(await r2.text(), {header:true, skipEmptyLines:true}).data
+      .map(s => Object.fromEntries(Object.entries(s).map(([k,v])=>[k.trim(),(v||'').trim()])));
 
     hint.style.display = 'none';
     document.getElementById('loginForm').style.display = 'block';
