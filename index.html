@@ -609,20 +609,50 @@ function manualLookup(){
 }
 
 function processBarcode(raw){
-  // Accept raw string or JSON with barcode_id
-  let barcodeId = raw.trim().toUpperCase();
-  try{ const p=JSON.parse(raw); if(p.barcode_id) barcodeId=p.barcode_id.trim().toUpperCase(); }catch{}
+  raw = raw.trim();
+
+  let barcodeId = null;
+  let schoolFromQR = null; // school name hint from QR
+
+  // Try to parse as JSON — handle multiple field name formats
+  try{
+    const p = JSON.parse(raw);
+    // barcode_id variants
+    barcodeId = (p.barcode_id || p.BARCODE_ID || p.barcodeId || p.id || p.ID || '').toString().trim().toUpperCase() || null;
+    // school name hint — for fuzzy fallback
+    schoolFromQR = (p.school_name || p.SCHOOL || p.school || p.SCHOOL_NAME || p.name || '').toString().trim();
+  } catch{
+    // Not JSON — treat as raw barcode string
+    barcodeId = raw.toUpperCase();
+  }
+
+  // --- Lookup by barcode_id first ---
+  let school = null;
+  if(barcodeId){
+    school = schools.find(s => (s.barcode_id||'').trim().toUpperCase() === barcodeId);
+  }
+
+  // --- Fallback: match by school name from QR ---
+  if(!school && schoolFromQR){
+    const qn = schoolFromQR.toUpperCase();
+    school = schools.find(s => (s.school_name||'').trim().toUpperCase() === qn);
+    // If found by name, use its barcode_id as the dedup key
+    if(school) barcodeId = (school.barcode_id||'').trim().toUpperCase();
+  }
+
+  if(!school){
+    // Show friendly error — never dump raw JSON
+    const display = barcodeId && barcodeId.length < 30 ? barcodeId : schoolFromQR || 'Unknown code';
+    showToast('School not found: ' + display, 'err');
+    return;
+  }
 
   // Duplicate check — within this session only
   if(scannedSchools.some(s => s.barcode_id === barcodeId)){
-    showToast('⚠ Already scanned in this session — duplicate blocked', 'err'); return;
+    showToast('⚠ Already scanned: ' + school.school_name, 'warn'); return;
   }
 
-  // Lookup — trim ALL CSV fields to avoid whitespace issues
-  const school = schools.find(s => (s.barcode_id||'').trim().toUpperCase() === barcodeId);
-  if(!school){ showToast('School not found: ' + barcodeId, 'err'); return; }
-
-  // PHU check — trim both sides before comparing
+  // PHU check — trim both sides
   const userPHU   = (currentUser.phu||'').trim();
   const schoolPHU = (school.phu||'').trim();
   if(userPHU && schoolPHU && schoolPHU !== userPHU){
