@@ -464,7 +464,7 @@ document.getElementById('loginUser').addEventListener('keydown', e => { if(e.key
 function doLogin(){
   const u = document.getElementById('loginUser').value.trim();
   const err = document.getElementById('loginErr');
-  const user = users.find(x => x.username === u && x.role === 'Distributor');
+  const user = users.find(x => (x.username||'').trim() === u && (x.role||'').trim() === 'Distributor');
   if(!user){
     err.textContent = 'Invalid username or not a Distributor account.';
     err.style.display = 'block';
@@ -477,7 +477,7 @@ function doLogin(){
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('appMain').style.display = 'block';
   document.getElementById('staffName').textContent = user.full_name;
-  document.getElementById('phuTag').textContent = user.phu || user.district || 'Distributor';
+  document.getElementById('phuTag').textContent = (user.phu||user.district||'Distributor').trim();
   switchTab('dash');
 }
 
@@ -610,43 +610,35 @@ function manualLookup(){
 
 function processBarcode(raw){
   // Accept raw string or JSON with barcode_id
-  let barcodeId = raw.toUpperCase().trim();
-  try{ const p=JSON.parse(raw); if(p.barcode_id) barcodeId=p.barcode_id.toUpperCase().trim(); }catch{}
+  let barcodeId = raw.trim().toUpperCase();
+  try{ const p=JSON.parse(raw); if(p.barcode_id) barcodeId=p.barcode_id.trim().toUpperCase(); }catch{}
 
-  // Duplicate check — global across all sessions for today
-  const todayKey = 'sbd_scanned_' + today();
-  const scannedToday = parse(todayKey, []);
-
+  // Duplicate check — within this session only
   if(scannedSchools.some(s => s.barcode_id === barcodeId)){
-    showToast('⚠ Already scanned this session — duplicate blocked', 'err'); return;
-  }
-  if(scannedToday.includes(barcodeId)){
-    showToast('⚠ This school was already scanned today', 'warn'); return;
+    showToast('⚠ Already scanned in this session — duplicate blocked', 'err'); return;
   }
 
-  // Lookup
-  const school = schools.find(s => (s.barcode_id||'').toUpperCase() === barcodeId);
-  if(!school){ showToast('School not found for barcode: ' + barcodeId, 'err'); return; }
+  // Lookup — trim ALL CSV fields to avoid whitespace issues
+  const school = schools.find(s => (s.barcode_id||'').trim().toUpperCase() === barcodeId);
+  if(!school){ showToast('School not found: ' + barcodeId, 'err'); return; }
 
-  // PHU check
-  if(currentUser.phu && school.phu && school.phu !== currentUser.phu){
-    showToast('School PHU ('+school.phu+') does not match your PHU ('+currentUser.phu+')', 'err'); return;
+  // PHU check — trim both sides before comparing
+  const userPHU   = (currentUser.phu||'').trim();
+  const schoolPHU = (school.phu||'').trim();
+  if(userPHU && schoolPHU && schoolPHU !== userPHU){
+    showToast('PHU mismatch — school: '+schoolPHU+' / you: '+userPHU, 'err'); return;
   }
 
   scannedSchools.push({
-    barcode_id: barcodeId,
-    school_name: school.school_name,
-    district: school.district,
-    chiefdom: school.chiefdom,
-    phu: school.phu,
-    target_pupils: school.target_pupils,
+    barcode_id:    barcodeId,
+    school_name:   school.school_name.trim(),
+    district:      school.district.trim(),
+    chiefdom:      school.chiefdom.trim(),
+    phu:           schoolPHU,
+    target_pupils: school.target_pupils.trim(),
     status: 'pending',
     dist_ig2: '', dist_pbo: '', reason: '', doneAt: ''
   });
-
-  // Track globally for today
-  scannedToday.push(barcodeId);
-  localStorage.setItem(todayKey, JSON.stringify(scannedToday));
 
   showToast('✓ ' + school.school_name + ' scanned', '');
   renderScanList();
